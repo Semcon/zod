@@ -64,7 +64,7 @@ def filter_zod_frames(zod_frames, dataset_split, config):
         )
 
 
-def process_zod_frame(zod_frame, pcd_files_dir): # TODO convert to pcd
+def process_zod_frame(zod_frame, pcd_files_dir):  # TODO convert to pcd
     """
     Processes a single ZOD frame, extracting relevant data.
 
@@ -82,12 +82,12 @@ def process_zod_frame(zod_frame, pcd_files_dir): # TODO convert to pcd
     # Handle point cloud creation (similar to original code)
     pcd_filename = f"{pcd_files_dir}/{zod_frame.info.id}.pcd"
     if os.path.exists(pcd_filename):
-      return core_image_path, annotations, pcd_filename
-      # ... (logic for creating point cloud from core_lidar)
+        return core_image_path, annotations, pcd_filename
+        # ... (logic for creating point cloud from core_lidar)
     return core_image_path, annotations, pcd_filename
 
 
-def convert_annotations(annotations): # TODO split into 2 funcs?
+def convert_annotations(annotations):  # TODO split into 2 funcs?
     """
     Converts ZOD annotations into FiftyOne detection format.
 
@@ -176,33 +176,14 @@ def create_dataset_samples(zod_frame, pcd_filename, config):
     return samples
 
 
-def create_dataset(config_path):
-    """
-    Creates a FiftyOne dataset from ZOD frames with point clouds and annotations.
-
-    Args:
-      config_path (str): Path to the configuration YAML file.
-    """
-    config = get_dataset_config(config_path)
-    create_dataset_directories(config)
-
-    zod_frames = ZodFrames(dataset_root=config["dataset_root"], version=config["dataset_version"])
-    zod_frame_list = filter_zod_frames(zod_frames, config["dataset_split"], config)
-
+def create_fiftyone_database(config, samples: list):
     dataset = fo.Dataset(name=config["dataset_name"])
-    samples = []
-
-    for idx in tqdm(zod_frame_list):
-        zod_frame = zod_frames[idx]
-        pcd_filename = process_zod_frame(zod_frame, config["pcd_files_dir"])[2] # TODO if weareusing only index2 do we need to return the others?
-        sample_list = create_dataset_samples(zod_frame, pcd_filename, config)
-        samples.extend(sample_list)
-
     dataset.add_samples(samples)
 
     # colour by label values by default
     # and change to colour blind friendly colour scheme
-    dataset.app_config.color_scheme = fo.ColorScheme( # TODO maybe this app config stuff can be it's own func?
+    # TODO maybe this app config stuff can be it's own func?
+    dataset.app_config.color_scheme = fo.ColorScheme(
         color_by="value",
         color_pool=[
             "#E69F00",
@@ -228,5 +209,65 @@ def create_dataset(config_path):
     dataset.persistent = config["dataset_persistent"]
 
 
+def create_dataset(config_path):
+    """
+    Creates a FiftyOne dataset from ZOD frames with point clouds and annotations.
+
+    Args:
+      config_path (str): Path to the configuration YAML file.
+    """
+    config = get_dataset_config(config_path)
+    create_dataset_directories(config)
+
+    zod_frames = ZodFrames(dataset_root=config["dataset_root"], version=config["dataset_version"])
+    zod_frame_list = filter_zod_frames(zod_frames, config["dataset_split"], config)
+
+    samples = []
+
+    for idx in tqdm(zod_frame_list):
+        zod_frame = zod_frames[idx]
+        pcd_filename = process_zod_frame(zod_frame, config["pcd_files_dir"])[
+            2
+        ]  # TODO if weareusing only index2 do we need to return the others?
+        sample_list = create_dataset_samples(zod_frame, pcd_filename, config)
+        samples.extend(sample_list)
+
+    create_fiftyone_database(config=config, samples=samples)
+
+    # dataset = fo.Dataset(name=config["dataset_name"])
+    # dataset.add_samples(samples)
+
+    # # colour by label values by default
+    # # and change to colour blind friendly colour scheme
+    # dataset.app_config.color_scheme = (
+    #     fo.ColorScheme(  # TODO maybe this app config stuff can be it's own func?
+    #         color_by="value",
+    #         color_pool=[
+    #             "#E69F00",
+    #             "#56b4e9",
+    #             "#009e74",
+    #             "#f0e442",
+    #             "#0072b2",
+    #             "#d55e00",
+    #             "#cc79a7",
+    #         ],
+    #     )
+    # )
+
+    # # if mapbox token is provided, add it to the app config
+    # if config["mapbox_token"]:
+    #     print("Mapbox token found, enabling map plugin.")
+    #     dataset.app_config.plugins["map"] = {"mapboxAccessToken": config["mapbox_token"]}
+    # else:
+    #     print("Mapbox token not found, map plugin not enabled.")
+
+    # dataset.save()
+
+    # # keep dataset after session is terminated or not - set in config.yaml
+    # dataset.persistent = config["dataset_persistent"]
+
+
 if __name__ == "__main__":
-    create_dataset(config_path='/home/general_zod/Golam/zod/examples/fiftyone-visualization/src/config.yaml')
+    create_dataset(
+        config_path="/home/general_zod/Golam/zod/examples/fiftyone-visualization/src/config.yaml"
+    )
