@@ -12,7 +12,7 @@ from zod import ZodFrames
 from zod.constants import AnnotationProject, Anonymization
 
 
-def get_dataset_config(config_path):
+def get_dataset_config(config_path: str) -> dict:
     """
     Loads configuration from a YAML file.
 
@@ -28,7 +28,7 @@ def get_dataset_config(config_path):
     return config
 
 
-def create_dataset_directories(config):
+def create_dataset_directories(config: dict) -> None:
     """
     Creates necessary directories for the dataset based on configuration.
 
@@ -39,7 +39,7 @@ def create_dataset_directories(config):
     os.makedirs(pcd_files_dir, exist_ok=True)
 
 
-def filter_zod_frames(zod_frames, dataset_split, config):
+def filter_zod_frames(zod_frames: ZodFrames, dataset_split: str, config: dict) -> list[str]:
     """
     Filters ZOD frames based on the specified dataset split.
 
@@ -64,7 +64,8 @@ def filter_zod_frames(zod_frames, dataset_split, config):
         )
 
 
-def process_zod_frame(zod_frame, pcd_files_dir):  # TODO convert to pcd
+def process_zod_frame(zod_frame: ZodFrames, pcd_files_dir: str) -> tuple[str, list, str]:
+    # TODO convert to pcd
     """
     Processes a single ZOD frame, extracting relevant data.
 
@@ -87,7 +88,8 @@ def process_zod_frame(zod_frame, pcd_files_dir):  # TODO convert to pcd
     return core_image_path, annotations, pcd_filename
 
 
-def convert_annotations(annotations):  # TODO split into 2 funcs?
+def convert_annotations(annotations: list) -> tuple[list[fo.Detection], list[fo.Detection]]:
+    # TODO split into 2 funcs?
     """
     Converts ZOD annotations into FiftyOne detection format.
 
@@ -129,7 +131,7 @@ def convert_annotations(annotations):  # TODO split into 2 funcs?
     return detections_3d, detections_2d
 
 
-def create_dataset_samples(zod_frame, pcd_filename, config):
+def create_dataset_samples(zod_frame: ZodFrames, pcd_filename: str, config: dict) -> list:
     """
     Creates FiftyOne samples (image and point cloud) with detections.
 
@@ -176,7 +178,14 @@ def create_dataset_samples(zod_frame, pcd_filename, config):
     return samples
 
 
-def create_fiftyone_database(config, samples: list):
+def create_fiftyone_database(config: dict, samples: list) -> None:
+    """
+    Creates a FiftyOne dataset from ZOD frames with point clouds and annotations.
+
+    Args:
+      config (dict): Configuration dictonary.
+      samples (list) : List of datas loaded from ZOD.
+    """
     dataset = fo.Dataset(name=config["dataset_name"])
     dataset.add_samples(samples)
 
@@ -209,7 +218,7 @@ def create_fiftyone_database(config, samples: list):
     dataset.persistent = config["dataset_persistent"]
 
 
-def create_dataset(config_path):
+def create_dataset(config_path: str) -> None:
     """
     Creates a FiftyOne dataset from ZOD frames with point clouds and annotations.
 
@@ -233,38 +242,6 @@ def create_dataset(config_path):
         samples.extend(sample_list)
 
     create_fiftyone_database(config=config, samples=samples)
-
-    # dataset = fo.Dataset(name=config["dataset_name"])
-    # dataset.add_samples(samples)
-
-    # # colour by label values by default
-    # # and change to colour blind friendly colour scheme
-    # dataset.app_config.color_scheme = (
-    #     fo.ColorScheme(  # TODO maybe this app config stuff can be it's own func?
-    #         color_by="value",
-    #         color_pool=[
-    #             "#E69F00",
-    #             "#56b4e9",
-    #             "#009e74",
-    #             "#f0e442",
-    #             "#0072b2",
-    #             "#d55e00",
-    #             "#cc79a7",
-    #         ],
-    #     )
-    # )
-
-    # # if mapbox token is provided, add it to the app config
-    # if config["mapbox_token"]:
-    #     print("Mapbox token found, enabling map plugin.")
-    #     dataset.app_config.plugins["map"] = {"mapboxAccessToken": config["mapbox_token"]}
-    # else:
-    #     print("Mapbox token not found, map plugin not enabled.")
-
-    # dataset.save()
-
-    # # keep dataset after session is terminated or not - set in config.yaml
-    # dataset.persistent = config["dataset_persistent"]
 
 
 if __name__ == "__main__":
