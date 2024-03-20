@@ -30,25 +30,13 @@ def get_dataset_config(config_path: str) -> dict:
     return config
 
 
-def create_dataset_directories(config: dict) -> None:
-    """
-    Creates necessary directories for the dataset based on configuration.
-
-    Args:
-      config (dict): The dataset configuration dictionary.
-    """
-    pcd_files_dir = config["pcd_files_dir"]
-    os.makedirs(pcd_files_dir, exist_ok=True)
-
-
-def filter_zod_frames(zod_frames: ZodFrames, dataset_split: str, config: dict) -> list[str]:
+def filter_zod_frames(zod_frames: ZodFrames, dataset_split: str) -> list[str]:
     """
     Filters ZOD frames based on the specified dataset split.
 
     Args:
       zod_frames (ZodFrames): The ZodFrames object containing all frames.
       dataset_split (str): The desired dataset split ("all", "train", or "val").
-      config (dict): The dataset configuration dictionary (for handling invalid splits).
 
     Returns:
       list: A list of ZOD frame IDs based on the split.
@@ -69,7 +57,8 @@ def filter_zod_frames(zod_frames: ZodFrames, dataset_split: str, config: dict) -
 def process_zod_frame(zod_frame: ZodFrames, pcd_files_dir: str) -> tuple[str, list, str]:
     # TODO convert to pcd
     """
-    Processes a single ZOD frame, extracting relevant data.
+    Processes a single ZOD frame, extracting image, annotation and create a lidar data in
+    .pcd format.
 
     Args:
       zod_frame (ZodFrame): The ZOD frame object.
@@ -84,9 +73,13 @@ def process_zod_frame(zod_frame: ZodFrames, pcd_files_dir: str) -> tuple[str, li
 
     # Handle point cloud creation (similar to original code)
     pcd_filename = f"{pcd_files_dir}/{zod_frame.info.id}.pcd"
-    if os.path.exists(pcd_filename):
-        return core_image_path, annotations, pcd_filename
-        # ... (logic for creating point cloud from core_lidar)
+
+    if not os.path.exists(pcd_filename):
+            core_lidar = zod_frame.get_lidar()[0]
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(core_lidar.points)
+            o3d.io.write_point_cloud(pcd_filename, pcd)
+            return core_image_path, annotations, pcd_filename
     return core_image_path, annotations, pcd_filename
 
 
@@ -133,7 +126,7 @@ def convert_annotations(annotations: list) -> tuple[list[fo.Detection], list[fo.
     return detections_3d, detections_2d
 
 
-def create_dataset_samples(zod_frame: ZodFrames, pcd_filename: str, config: dict) -> list:
+def create_dataset_samples(zod_frame: ZodFrames, pcd_files_dir: str) -> list:
     """
     Creates FiftyOne samples (image and point cloud) with detections.
 
@@ -145,7 +138,7 @@ def create_dataset_samples(zod_frame: ZodFrames, pcd_filename: str, config: dict
     Returns:
       list: A list of FiftyOne Sample objects.
     """
-    core_image_path, annotations, _ = process_zod_frame(zod_frame, config["pcd_files_dir"])
+    core_image_path, annotations, pcd_filename = process_zod_frame(zod_frame, pcd_files_dir)
     detections_3d, detections_2d = convert_annotations(annotations)
 
     group = fo.Group()
@@ -228,19 +221,19 @@ def create_dataset(config_path: str) -> None:
       config_path (str): Path to the configuration YAML file.
     """
     config = get_dataset_config(config_path)
-    create_dataset_directories(config)
+    # Creates necessary directories for the dataset based on configuration.
+    os.makedirs(config["pcd_files_dir"], exist_ok=True)
 
     zod_frames = ZodFrames(dataset_root=config["dataset_root"], version=config["dataset_version"])
-    zod_frame_list = filter_zod_frames(zod_frames, config["dataset_split"], config)
+    zod_frame_list = filter_zod_frames(zod_frames, config["dataset_split"])
+    if config["test_run"]:
+        zod_frame_list = zod_frame_list[:10]
 
     samples = []
 
     for idx in tqdm(zod_frame_list):
         zod_frame = zod_frames[idx]
-        pcd_filename = process_zod_frame(zod_frame, config["pcd_files_dir"])[
-            2
-        ]  # TODO if weareusing only index2 do we need to return the others?
-        sample_list = create_dataset_samples(zod_frame, pcd_filename, config)
+        sample_list = create_dataset_samples(zod_frame, config["pcd_files_dir"])
         samples.extend(sample_list)
 
     create_fiftyone_database(config=config, samples=samples)
