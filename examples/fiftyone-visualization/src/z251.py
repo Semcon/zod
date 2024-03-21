@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
@@ -10,7 +11,7 @@ from tqdm import tqdm
 from utils import normalize_bbox, quaternion_to_euler
 
 import zod.constants as constants
-from zod import ZodFrames
+from zod import ZodFrame, ZodFrames
 from zod.constants import AnnotationProject, Anonymization
 
 
@@ -54,7 +55,7 @@ def filter_zod_frames(zod_frames: ZodFrames, dataset_split: str) -> list[str]:
         )
 
 
-def process_zod_frame(zod_frame: ZodFrames, pcd_files_dir: str) -> tuple[str, list, str]:
+def process_zod_frame(zod_frame: ZodFrame, pcd_files_dir: str) -> tuple[str, list, str]:
     # TODO convert to pcd
     """
     Processes a single ZOD frame, extracting image, annotation and create a lidar data in
@@ -75,11 +76,11 @@ def process_zod_frame(zod_frame: ZodFrames, pcd_files_dir: str) -> tuple[str, li
     pcd_filename = f"{pcd_files_dir}/{zod_frame.info.id}.pcd"
 
     if not os.path.exists(pcd_filename):
-            core_lidar = zod_frame.get_lidar()[0]
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(core_lidar.points)
-            o3d.io.write_point_cloud(pcd_filename, pcd)
-            return core_image_path, annotations, pcd_filename
+        core_lidar = zod_frame.get_lidar()[0]
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(core_lidar.points)
+        o3d.io.write_point_cloud(pcd_filename, pcd)
+        return core_image_path, annotations, pcd_filename
     return core_image_path, annotations, pcd_filename
 
 
@@ -126,7 +127,7 @@ def convert_annotations(annotations: list) -> tuple[list[fo.Detection], list[fo.
     return detections_3d, detections_2d
 
 
-def create_dataset_samples(zod_frame: ZodFrames, pcd_files_dir: str) -> list:
+def create_dataset_samples(zod_frame: ZodFrame, pcd_files_dir: str) -> list:
     """
     Creates FiftyOne samples (image and point cloud) with detections.
 
@@ -168,14 +169,14 @@ def create_dataset_samples(zod_frame: ZodFrames, pcd_files_dir: str) -> list:
         )
 
     add_metadata(0)  # add metadata to images
-    # add_metadata(1) # add metadata to point clouds (optional)
+    add_metadata(1)  # add metadata to point clouds (optional)
 
     return samples
 
 
-def create_fiftyone_database(config: dict, samples: list) -> None:
+def create_fiftyone_dataset(config: dict, samples: list) -> None:
     """
-    Creates a FiftyOne dataset from ZOD frames with point clouds and annotations.
+    Creates a FiftyOne dataset from extracted ZOD frame samples .
 
     Args:
       config (dict): Configuration dictonary.
@@ -213,7 +214,7 @@ def create_fiftyone_database(config: dict, samples: list) -> None:
     dataset.persistent = config["dataset_persistent"]
 
 
-def create_dataset(config_path: str) -> None:
+def create_zod_to_fiftyone_dataset(config_path: str) -> None:
     """
     Creates a FiftyOne dataset from ZOD frames with point clouds and annotations.
 
@@ -236,10 +237,33 @@ def create_dataset(config_path: str) -> None:
         sample_list = create_dataset_samples(zod_frame, config["pcd_files_dir"])
         samples.extend(sample_list)
 
-    create_fiftyone_database(config=config, samples=samples)
+    create_fiftyone_dataset(config=config, samples=samples)
+
+
+def parse_arguments():
+    """Parses command-line arguments using argparse.
+
+    Returns:
+        Namespace: An object containing parsed arguments.
+    """
+
+    parser = argparse.ArgumentParser(
+        add_help=False,
+        description="A script that converts ZOD dataset to a \
+                                                    voxelfiftyone dataset.",
+    )
+    parser.add_argument("path", type=str, help="The path for the config file.")
+    parser.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        default=argparse.SUPPRESS,
+        help="Show this help message and exit.",
+    )
+
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    create_dataset(
-        config_path="/home/general_zod/Golam/zod/examples/fiftyone-visualization/src/config.yaml"
-    )
+    args = parse_arguments()
+    create_zod_to_fiftyone_dataset(config_path=args.path)
